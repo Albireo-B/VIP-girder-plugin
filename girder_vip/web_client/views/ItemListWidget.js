@@ -59,6 +59,7 @@ ItemListWidget.prototype.fetchFilesForItem = function (item) {
   this.itemToLaunch = item;
   // fetch item files
   this.itemFiles = new FileCollection();
+  console.log("THERE");
   this.itemFiles.altUrl = 'item/' + this.itemToLaunch.id + '/files';
   this.itemFiles.append = true; // Append, don't replace pages
   this.itemFiles

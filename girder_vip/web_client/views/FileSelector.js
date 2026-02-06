@@ -14,6 +14,7 @@ import BrowserWidget from '@girder/core/views/widgets/BrowserWidget';
 
 // import template
 import FileSelectorTemplate from '../templates/fileSelector.pug';
+import FolderSelectorCheckboxTemplate from '../templates/folderSelectorCheckbox.pug';
 
 // extends girder browser widget to :
 // - only show configured collections
@@ -21,45 +22,47 @@ import FileSelectorTemplate from '../templates/fileSelector.pug';
 
 var FileSelector = BrowserWidget.extend({
 
-  events : _.extend({
-    'click .modal-footer a.btn-default' : function () {
-            if (this.fileSelectMode) {
-              this.toggleFileSelectMode();
-            } else {
-              this.$el.modal('hide');
-            }
-        }
+  events: _.extend({
+    'click .modal-footer a.btn-default': function () {
+      if (this.fileSelectMode) {
+        this.toggleFileSelectMode();
+      } else {
+        this.$el.modal('hide');
+      }
+    }
   }, BrowserWidget.prototype.events),
 
   // override initialise
   initialize: function (settings) {
     settings = settings || {};
+    console.log("settings.defaultSelectedFile", settings.defaultSelectedFile);
+    console.log("settings.defaultSelectedItem", settings.defaultSelectedItem);
     this.selectedFile = settings.defaultSelectedFile;
     settings.defaultSelectedResource = settings.defaultSelectedItem;
 
     getVipConfig().then(vipConfig => this.initWithVipConfig(vipConfig, settings));
   },
 
-  initWithVipConfig: function(vipConfig, settings) {
+  initWithVipConfig: function (vipConfig, settings) {
     // only show configured collections
     var filteredCollections = new CollectionCollection();
     filteredCollections.filterFunc =
-     (c => _.contains(vipConfig.authorized_collections, c._id) );
+        (c => _.contains(vipConfig.authorized_collections, c._id));
 
     var rootSelectorSettings = {
       display: ['Home', 'VIP Authorized Collections'],
-      groups: {'VIP Authorized Collections' : filteredCollections}
+      groups: {'VIP Authorized Collections': filteredCollections}
     };
 
     // use girder browser in item mode
     BrowserWidget.prototype.initialize.call(this, _.extend({
-        showItems: true,
-        selectItem: true,
-        highlightItem: true,
-        removeItemInfo: true,
-        submitText: 'Select',
-        rootSelectorSettings: rootSelectorSettings
-    }, settings) );
+      showItems: true,
+      selectItem: true,
+      highlightItem: true,
+      removeItemInfo: true,
+      submitText: 'Select',
+      rootSelectorSettings: rootSelectorSettings
+    }, settings));
 
     // this should be done in BrowserWidget, that's a bug
     if (this.defaultSelectedResource) {
@@ -74,19 +77,37 @@ var FileSelector = BrowserWidget.extend({
     BrowserWidget.prototype.render.call(this);
 
     const defaultResourceFileName = (this.selectedFile
-      && this.selectedFile.get('name'));
+        && this.selectedFile.get('name'));
     this.$('.modal-body.g-browser-widget').after(
-      FileSelectorTemplate({
-        defaultSelectedFile: defaultResourceFileName
-      })
+        FileSelectorTemplate({
+          defaultSelectedFile: defaultResourceFileName
+        })
     );
     this.$('.modal-body.vip-file-selector').toggleClass('hidden');
     this.$('.modal-footer a.btn-default').removeAttr('data-dismiss');
     this.fileSelectMode = false;
 
+    this.$('.modal-footer').prepend(FolderSelectorCheckboxTemplate());
+    this.$('#vip-folders-checkbox').on('change', this.toggleFolderSelection.bind(this));
+    if (this._selected && this._selected.resourceName === 'folder') {
+      this.$('#vip-folders-checkbox').prop('checked', true).trigger('change');
+    }
+
     return this;
   },
+  toggleFolderSelection: function() {
+    const isChecked = this.$('#vip-folders-checkbox').is(':checked');
+    this.selectItem = !isChecked;
+    console.log(isChecked);
+    this.$('.modal-header .modal-title').text(isChecked ? "Select a folder" : "Select an item");
+    this.$('.g-selected-model .control-label').text(isChecked ? "Selected folder" : "Selected item");
+    if (this.root == null)
+      return;
 
+    isChecked ? this._selectModel() : this._selectItem();
+    this.selectedFile = this._selected;
+    this.$('#vip-selected-file').val(this._selected ? this._selected.get("name") : '');
+  },
   toggleFileSelectMode: function() {
     this.fileSelectMode = ! this.fileSelectMode;
     this.$('.modal-body.g-browser-widget').toggleClass('hidden');
@@ -120,11 +141,17 @@ var FileSelector = BrowserWidget.extend({
     }
 
     // fetch item files
-    var item = this.selectedModel();
-    if ( ! item) {
+    var selectedModel = this.selectedModel();
+    if ( ! selectedModel || selectedModel.resourceName === 'user') {
       // use girder browser error display
-      this.validate = () => Promise.reject("Please select an item");
+      this.validate = () => Promise.reject(this.selectItem ? "Please select an item" : "Please select a folder");
       BrowserWidget.prototype._validate.call(this);
+      return;
+    }
+
+    if (selectedModel.resourceName === 'folder')  {
+      this.$el.modal('hide');
+      this.trigger('g:saved', selectedModel, null);
       return;
     }
 
@@ -137,7 +164,7 @@ var FileSelector = BrowserWidget.extend({
       this.fileListWidget.destroy();
     }
     this.fileListWidget = new FileListWidget({
-      item: item,
+      item: selectedModel,
       parentView: this,
       selectMode: true,
       onFileClick: this.onFileSelected.bind(this),

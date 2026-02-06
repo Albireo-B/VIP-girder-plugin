@@ -115,7 +115,11 @@ var LaunchVipPipeline = View.extend({
       optionalFile: [],
       optional: []
     };
+
+    console.log("pipeline", this.pipeline);
     _.each(this.pipeline.parameters, (param, pid) => {
+      console.log(param);
+
       param.pid = pid;
       if (param.name === 'results-directory') return;
       if (param.type == "File" && !param.defaultValue) {
@@ -190,9 +194,10 @@ var LaunchVipPipeline = View.extend({
       item: item,
       file: file
     };
+
     this.lastItem = item;
     this.lastFile = file;
-    return this.getResourcePath(file).then((result) => {
+    return this.getResourcePath(item.resourceName === 'folder' ? item : file).then((result) => {
       this.$('#vip-launch-' + pid).val(`${result}`);
     });
   },
